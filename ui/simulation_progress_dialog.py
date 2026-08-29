@@ -38,10 +38,6 @@ class SimulationProgressDialog(QDialog):
         self.progress_bar.setValue(0)
         layout.addWidget(self.progress_bar)
 
-        self.percent_label = QLabel("0%")
-        self.percent_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.percent_label)
-
         self.info_label = QLabel("准备中…")
         self.info_label.setWordWrap(True)
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -66,7 +62,6 @@ class SimulationProgressDialog(QDialog):
     # ---- 信号处理 ----
     def _on_progress(self, percent: int, text: str):
         self.progress_bar.setValue(percent)
-        self.percent_label.setText(f"{percent}%")
         self.info_label.setText(text)
 
     def _on_finished(self, result):
