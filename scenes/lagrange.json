@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "name": "拉格朗日等边三角解",
+  "description": "经典拉格朗日等边三角特解（Lagrange, 1772）：三颗等质量天体位于等边三角形顶点，绕质心匀速旋转。G=1、m=1、外接圆半径 1、角速度 3^(-1/4)，周期 T≈8.26913690。等质量情形线性不稳定，但为三体问题最著名的特解之一。",
+  "units": {
+    "length": "DU",
+    "mass": "MU",
+    "time": "TU",
+    "velocity": "DU/TU"
+  },
+  "G": 1.0,
+  "integrator": "rk4",
+  "timestep": 0.001,
+  "time_scale": 1.0,
+  "simulation_time": 0.0,
+  "camera": {
+    "center_x": 0.0,
+    "center_y": 0.0,
+    "zoom": 150.0,
+    "viewport_width": 1400,
+    "viewport_height": 900
+  },
+  "bodies": [
+    {
+      "name": "Body 1",
+      "mass": 1.0,
+      "radius": 0.0001,
+      "render_radius": 0.0001,
+      "position": [0.0, 1.0],
+      "velocity": [-0.7598356856515925, 0.0],
+      "color": [1.0, 0.3, 0.3]
+    },
+    {
+      "name": "Body 2",
+      "mass": 1.0,
+      "radius": 0.0001,
+      "render_radius": 0.0001,
+      "position": [-0.8660254037844386, -0.5],
+      "velocity": [0.37991784282579625, -0.6580372343718818],
+      "color": [0.3, 1.0, 0.3]
+    },
+    {
+      "name": "Body 3",
+      "mass": 1.0,
+      "radius": 0.0001,
+      "render_radius": 0.0001,
+      "position": [0.8660254037844386, -0.5],
+      "velocity": [0.37991784282579625, 0.6580372343718818],
+      "color": [0.3, 0.3, 1.0]
+    }
+  ]
+}

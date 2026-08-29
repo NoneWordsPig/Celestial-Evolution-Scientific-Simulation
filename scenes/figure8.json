@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "name": "Figure-8 三体系统",
+  "description": "经典 Figure-8 稳定周期轨道（Chenciner & Montgomery, 2000），三体等质量 m=1、G=1，周期 T≈6.32591398。初值保留 10 位小数；该轨道是目前已知少数线性稳定的三体周期解之一。",
+  "units": {
+    "length": "DU",
+    "mass": "MU",
+    "time": "TU",
+    "velocity": "DU/TU"
+  },
+  "G": 1.0,
+  "integrator": "rk4",
+  "timestep": 0.0005,
+  "time_scale": 1.0,
+  "simulation_time": 0.0,
+  "camera": {
+    "center_x": 0.0,
+    "center_y": 0.0,
+    "zoom": 150.0,
+    "viewport_width": 1400,
+    "viewport_height": 900
+  },
+  "bodies": [
+    {
+      "name": "Body 1",
+      "mass": 1.0,
+      "radius": 0.0001,
+      "render_radius": 0.0001,
+      "position": [-0.97000436, 0.24308753],
+      "velocity": [0.4662036850, 0.4323657300],
+      "color": [1.0, 0.3, 0.3]
+    },
+    {
+      "name": "Body 2",
+      "mass": 1.0,
+      "radius": 0.0001,
+      "render_radius": 0.0001,
+      "position": [0.97000436, -0.24308753],
+      "velocity": [0.4662036850, 0.4323657300],
+      "color": [0.3, 1.0, 0.3]
+    },
+    {
+      "name": "Body 3",
+      "mass": 1.0,
+      "radius": 0.0001,
+      "render_radius": 0.0001,
+      "position": [0.0, 0.0],
+      "velocity": [-0.9324073700, -0.8647314600],
+      "color": [0.3, 0.3, 1.0]
+    }
+  ]
+}

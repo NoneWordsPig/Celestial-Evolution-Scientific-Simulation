@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "name": "飞蛾轨道 Moth I",
+  "description": "三体等质量周期特解 Moth I（Šuvakov & Dmitrašinović, 2013, arXiv:1303.0181 表 1）。m=1、G=1、零角动量，特征周期 T≈14.89430517。初值在论文 5–6 位小数基础上经数值精修至闭合误差 ~1e-10；该特解线性不稳定，适合观赏一到数个周期。",
+  "units": {
+    "length": "DU",
+    "mass": "MU",
+    "time": "TU",
+    "velocity": "DU/TU"
+  },
+  "G": 1.0,
+  "integrator": "rk4",
+  "timestep": 0.001,
+  "time_scale": 1.0,
+  "simulation_time": 0.0,
+  "camera": {
+    "center_x": 0.0,
+    "center_y": 0.0,
+    "zoom": 150.0,
+    "viewport_width": 1400,
+    "viewport_height": 900
+  },
+  "bodies": [
+    {
+      "name": "Body 1",
+      "mass": 1.0,
+      "radius": 0.0001,
+      "render_radius": 0.0001,
+      "position": [-1.0, 0.0],
+      "velocity": [0.464445172817181, 0.396060014652470],
+      "color": [1.0, 0.3, 0.3]
+    },
+    {
+      "name": "Body 2",
+      "mass": 1.0,
+      "radius": 0.0001,
+      "render_radius": 0.0001,
+      "position": [1.0, 0.0],
+      "velocity": [0.464445172817181, 0.396060014652470],
+      "color": [0.3, 1.0, 0.3]
+    },
+    {
+      "name": "Body 3",
+      "mass": 1.0,
+      "radius": 0.0001,
+      "render_radius": 0.0001,
+      "position": [0.0, 0.0],
+      "velocity": [-0.928890345634362, -0.792120029304940],
+      "color": [0.3, 0.3, 1.0]
+    }
+  ]
+}
