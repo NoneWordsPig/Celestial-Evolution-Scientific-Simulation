@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
 logs/
+
+ui/packaging/build/
+ui/packaging/dist/
+ui/packaging/smoke-result.json

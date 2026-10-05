@@ -50,12 +50,46 @@ RK4（与预设积分器相同）、碰撞检测与融合、软化因子。
 
 其他默认（天体输入默认值、预设内容等）同 Celestial Evolution Simulation。
 
-## 安装与运行
+## Windows 下载（0.1）
+
+前往 [GitHub Release 0.1](https://github.com/NoneWordsPig/Celestial-Evolution-Scientific-Simulation/releases/tag/0.1)，下载 `Celestial-Evolution-Scientific-Simulation-0.1-Windows-x64.exe`，双击即可运行，无需安装 Python。
+
+- 适用于 Windows 10/11 64 位，内置 9 个预设、PyQt6、NumPy 和 Numba。
+- 首次启动需要解压内置依赖；首次模拟需要编译 JIT 内核，请稍候。
+- 选择“导入预设”或“新设置”，设置模拟时长、步长与播放速度，计算完成后进入回放。
+- Release 附带 `SHA256SUMS.txt`，可用 PowerShell 的 `Get-FileHash -Algorithm SHA256` 校验下载文件。
+
+## 源码安装与运行
 
 ```bash
-pip install -r requirements.txt   # numba 可选但强烈推荐：float64 路径约 20-40x 加速
+pip install -r requirements.txt   # numba 可选但强烈推荐：float64 路径可加速计算，实际效果取决于场景和运行环境
 python main.py
 ```
+
+## 构建 Windows EXE
+
+在 Windows 上进入项目根目录，安装依赖后执行：
+
+```powershell
+python -m pip install -r requirements.txt
+python -m pip install pyinstaller
+python -m PyInstaller ui/packaging/release.spec --distpath ui/packaging/dist --workpath ui/packaging/build --noconfirm
+```
+
+输出位于 `ui/packaging/dist/`，为包含预设和依赖的单文件程序。打包配置保留 Numba 内核源码以支持冻结程序中的 JIT 缓存。
+
+运行现有物理回归测试：
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+## 使用提示
+
+- 计算总步数约为 `模拟时长 / 时间步长`；减小步长会显著增加计算时间。
+- 回放帧数约为 `模拟时长 / 播放速度 × 60`；帧快照保存在内存中，长时模拟需考虑内存容量。
+- 60 FPS 为目标回放帧率，实际效果取决于设备性能与天体数量。
+- 高精度模式可减少数值表示误差，但运行更慢；积分误差仍取决于步长与算法。
 
 ## 项目结构
 
@@ -88,4 +122,3 @@ ui/
   原项目未做任何修改。
 - 高精度路径中，极坐标速度（速率+角度）的三角函数使用标准库 `math`
   （float 精度）；需要完整精度的速度输入请使用 X/Y 笛卡尔模式。
-
