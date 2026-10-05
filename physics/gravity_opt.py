@@ -8,6 +8,7 @@ import warnings
 from typing import List, Optional
 from .body import Body
 from .constants import G, SOFTENING
+from .kernels import accelerations
 
 # 尝试导入CuPy（GPU加速）
 CUPY_AVAILABLE = False
@@ -79,7 +80,7 @@ class GravitySolverOpt:
         return cp.asnumpy(accelerations_cp)
     
     def _compute_cpu(self, bodies: List[Body]) -> np.ndarray:
-        """CPU实现（与原版完全相同）"""
+        """CPU 路径复用共享引力内核，Numba 不可用时使用 NumPy。"""
         n = len(bodies)
         if n == 0:
             return np.zeros((0, 2), dtype=np.float64)
@@ -88,16 +89,7 @@ class GravitySolverOpt:
         positions = np.array([b.position for b in bodies], dtype=np.float64)
         masses = np.array([b.mass for b in bodies], dtype=np.float64)
         
-        # 计算所有 pairwise 位移差
-        diff = positions[np.newaxis, :, :] - positions[:, np.newaxis, :]
-        dist_sq = np.sum(diff ** 2, axis=2) + self.softening ** 2
-        np.fill_diagonal(dist_sq, 1.0)
-        inv_dist_cube = 1.0 / (dist_sq ** 1.5)
-        np.fill_diagonal(inv_dist_cube, 0.0)
-        weights = masses[np.newaxis, :] * inv_dist_cube
-        accelerations = G * np.sum(weights[:, :, np.newaxis] * diff, axis=1)
-        
-        return accelerations
+        return accelerations(positions, masses, self.softening ** 2)
 
     def compute_acceleration_single(self, bodies: List[Body], index: int) -> np.ndarray:
         """计算单个天体的加速度"""

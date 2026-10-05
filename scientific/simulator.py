@@ -9,8 +9,8 @@
 3. 显示"模拟进度"。
 
 两条计算路径：
-- float64 快速路径：与 physics.integrator_opt.RK4IntegratorOpt 使用完全相同的
-  RK4 格式；安装 numba 时使用融合 JIT 内核（RK4 + 碰撞检测一步完成），
+- float64 快速路径：与实时模拟复用 physics.kernels 的 RK4 和碰撞检测；
+  安装 numba 时使用 JIT 内核，
   否则回退到 NumPy 向量化 RK4，适用于"输入精度较小"的常规情形；
 - decimal 高精度路径：Decimal RK4（纯 Python），支持 20 位以上有效数字，
   当输入精度超出 float64 无损表示范围或用户显式指定高精度时启用。
@@ -19,20 +19,13 @@
 Decimal 路径实现等价的动量/质量守恒融合。
 """
 
-import math
 import time
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 
-# 可选 JIT 加速：安装 numba 时使用融合 JIT 内核（10x+），缺失时自动回退 NumPy 路径
-try:
-    from numba import njit
-except Exception:  # pragma: no cover - numba 未安装时回退
-    njit = None
-
-_NUMBA_AVAILABLE = njit is not None
+from physics.kernels import rk4_step_and_check
 
 from physics import Body, CollisionHandler
 from physics.constants import G, COLLISION_FACTOR, SOFTENING
@@ -214,193 +207,6 @@ def _float_state(bodies: List[Body]) -> _FloatState:
     )
 
 
-def _acc_float(pos, mass, softening_sq: float) -> np.ndarray:
-    """NumPy 向量化引力加速度（与 GravitySolver 相同公式，2D 差分避免 3D 临时数组）。"""
-    n = pos.shape[0]
-    if n == 0:
-        return np.zeros((0, 2), dtype=np.float64)
-    if n == 1:
-        return np.zeros((1, 2), dtype=np.float64)
-    x = pos[:, 0]
-    y = pos[:, 1]
-    dx = x[None, :] - x[:, None]          # dx[i, j] = pos[j] - pos[i]
-    dy = y[None, :] - y[:, None]
-    dist_sq = dx * dx + dy * dy + softening_sq
-    idx = np.arange(n)
-    dist_sq[idx, idx] = 1.0
-    inv_cube = dist_sq ** -1.5
-    inv_cube[idx, idx] = 0.0
-    weights = mass[None, :] * inv_cube    # weights[i, j] = mass[j] * inv_cube
-    ax = (weights * dx).sum(axis=1) * G
-    ay = (weights * dy).sum(axis=1) * G
-    return np.column_stack((ax, ay))
-
-
-def _rk4_step_float(pos, vel, mass, dt, softening_sq):
-    """与 RK4IntegratorOpt 完全相同的 RK4 步进。"""
-    n = pos.shape[0]
-    if n == 0:
-        return pos, vel
-    half = 0.5 * dt
-    sixth = dt / 6.0
-
-    a1 = _acc_float(pos, mass, softening_sq)
-    v1 = vel.copy()
-
-    p2 = pos + half * v1
-    v2 = vel + half * a1
-    a2 = _acc_float(p2, mass, softening_sq)
-
-    p3 = pos + half * v2
-    v3 = vel + half * a2
-    a3 = _acc_float(p3, mass, softening_sq)
-
-    p4 = pos + dt * v3
-    v4 = vel + dt * a3
-    a4 = _acc_float(p4, mass, softening_sq)
-
-    new_pos = pos + sixth * (v1 + 2.0 * v2 + 2.0 * v3 + v4)
-    new_vel = vel + sixth * (a1 + 2.0 * a2 + 2.0 * a3 + a4)
-    return new_pos, new_vel
-
-
-_TRIU_INDICES: dict = {}
-
-
-def _triu_indices(n: int):
-    """缓存上三角索引，避免每步重复分配。"""
-    idx = _TRIU_INDICES.get(n)
-    if idx is None:
-        idx = np.triu_indices(n, 1)
-        _TRIU_INDICES[n] = idx
-    return idx
-
-
-if _NUMBA_AVAILABLE:
-
-    @njit(cache=True)
-    def _acc_numba(p, mass, softening_sq):
-        """对称上三角 Numba 引力加速度（成对仅计算一次，无临时数组）。"""
-        n = p.shape[0]
-        acc = np.zeros((n, 2), dtype=np.float64)
-        for i in range(n):
-            xi = p[i, 0]
-            yi = p[i, 1]
-            for j in range(i + 1, n):
-                dx = p[j, 0] - xi
-                dy = p[j, 1] - yi
-                dsq = dx * dx + dy * dy + softening_sq
-                inv = 1.0 / (dsq * math.sqrt(dsq))
-                wi = mass[j] * inv
-                wj = mass[i] * inv
-                acc[i, 0] += wi * dx
-                acc[i, 1] += wi * dy
-                acc[j, 0] -= wj * dx
-                acc[j, 1] -= wj * dy
-        return acc * G
-
-    @njit(cache=True)
-    def _rk4_step_numba(pos, vel, mass, radii, dt, softening_sq):
-        """融合 RK4 步进 + 碰撞检测（与 _rk4_step_float 数学等价，复用缓冲避免临时数组）。"""
-        n = pos.shape[0]
-        half = 0.5 * dt
-        sixth = dt / 6.0
-
-        # k1（v1 = vel）
-        a1 = _acc_numba(pos, mass, softening_sq)
-
-        # k2
-        p2 = np.empty((n, 2), dtype=np.float64)
-        v2 = np.empty((n, 2), dtype=np.float64)
-        for i in range(n):
-            p2[i, 0] = pos[i, 0] + half * vel[i, 0]
-            p2[i, 1] = pos[i, 1] + half * vel[i, 1]
-            v2[i, 0] = vel[i, 0] + half * a1[i, 0]
-            v2[i, 1] = vel[i, 1] + half * a1[i, 1]
-        a2 = _acc_numba(p2, mass, softening_sq)
-
-        # k3
-        p3 = np.empty((n, 2), dtype=np.float64)
-        v3 = np.empty((n, 2), dtype=np.float64)
-        for i in range(n):
-            p3[i, 0] = pos[i, 0] + half * v2[i, 0]
-            p3[i, 1] = pos[i, 1] + half * v2[i, 1]
-            v3[i, 0] = vel[i, 0] + half * a2[i, 0]
-            v3[i, 1] = vel[i, 1] + half * a2[i, 1]
-        a3 = _acc_numba(p3, mass, softening_sq)
-
-        # k4
-        p4 = np.empty((n, 2), dtype=np.float64)
-        v4 = np.empty((n, 2), dtype=np.float64)
-        for i in range(n):
-            p4[i, 0] = pos[i, 0] + dt * v3[i, 0]
-            p4[i, 1] = pos[i, 1] + dt * v3[i, 1]
-            v4[i, 0] = vel[i, 0] + dt * a3[i, 0]
-            v4[i, 1] = vel[i, 1] + dt * a3[i, 1]
-        a4 = _acc_numba(p4, mass, softening_sq)
-
-        new_pos = np.empty((n, 2), dtype=np.float64)
-        new_vel = np.empty((n, 2), dtype=np.float64)
-        for i in range(n):
-            new_pos[i, 0] = pos[i, 0] + sixth * (vel[i, 0] + 2.0 * v2[i, 0] + 2.0 * v3[i, 0] + v4[i, 0])
-            new_pos[i, 1] = pos[i, 1] + sixth * (vel[i, 1] + 2.0 * v2[i, 1] + 2.0 * v3[i, 1] + v4[i, 1])
-            new_vel[i, 0] = vel[i, 0] + sixth * (a1[i, 0] + 2.0 * a2[i, 0] + 2.0 * a3[i, 0] + a4[i, 0])
-            new_vel[i, 1] = vel[i, 1] + sixth * (a1[i, 1] + 2.0 * a2[i, 1] + 2.0 * a3[i, 1] + a4[i, 1])
-
-        # 碰撞检测（基于步进后的位置，与 _collision_exists_float 语义一致）
-        hit = False
-        for i in range(n - 1):
-            ri = radii[i]
-            xi = new_pos[i, 0]
-            yi = new_pos[i, 1]
-            for j in range(i + 1, n):
-                dx = xi - new_pos[j, 0]
-                dy = yi - new_pos[j, 1]
-                dsq = dx * dx + dy * dy
-                th = (ri + radii[j]) * COLLISION_FACTOR
-                if dsq < th * th:
-                    hit = True
-                    break
-            if hit:
-                break
-        return new_pos, new_vel, hit
-
-else:
-
-    def _acc_numba(*_args, **_kwargs):  # pragma: no cover - 占位，实际不会被调用
-        raise RuntimeError("numba 不可用")
-
-    def _rk4_step_numba(*_args, **_kwargs):  # pragma: no cover - 占位，实际不会被调用
-        raise RuntimeError("numba 不可用")
-
-
-def _rk4_step_and_check(pos, vel, mass, radii, dt, softening_sq):
-    """一步 RK4 + 碰撞检测。
-
-    Numba 可用时使用融合 JIT 内核；否则回退到 NumPy 向量化路径。
-    返回 (new_pos, new_vel, has_collision)。
-    """
-    n = pos.shape[0]
-    if n == 0:
-        return pos, vel, False
-    if _NUMBA_AVAILABLE:
-        return _rk4_step_numba(pos, vel, mass, radii, dt, softening_sq)
-    new_pos, new_vel = _rk4_step_float(pos, vel, mass, dt, softening_sq)
-    return new_pos, new_vel, _collision_exists_float(new_pos, radii)
-
-
-def _collision_exists_float(pos, radii, factor=COLLISION_FACTOR) -> bool:
-    n = pos.shape[0]
-    if n < 2:
-        return False
-    iu, ju = _triu_indices(n)
-    dx = pos[iu, 0] - pos[ju, 0]
-    dy = pos[iu, 1] - pos[ju, 1]
-    dsq = dx * dx + dy * dy
-    th = (radii[iu] + radii[ju]) * factor
-    return bool(np.any(dsq < th * th))
-
-
 def _resolve_collisions_float(state: _FloatState) -> None:
     """将数组状态转成 Body 列表，复用 CollisionHandler 融合后写回。"""
     n = state.positions.shape[0]
@@ -492,7 +298,7 @@ def _run_float64(state: _FloatState, initial, config, progress, cancel) -> Optio
             result.cancelled = True
             return None
         dt_eff = min(dt, duration - sim_time)
-        pos, vel, has_collision = _rk4_step_and_check(
+        pos, vel, has_collision = rk4_step_and_check(
             pos, vel, mass, radii, dt_eff, softening_sq
         )
         sim_time += dt_eff
@@ -826,4 +632,3 @@ def _run_decimal(state: _DecimalState, initial, config, digits, progress, cancel
     if progress is not None:
         progress(100, f"模拟完成 · 共 {total_steps:,} 步 · {len(result.frame_times):,} 个渲染帧 · 耗时 {result.elapsed_seconds:.1f}s")
     return result
-

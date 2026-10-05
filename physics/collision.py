@@ -11,6 +11,7 @@ from collections import deque
 import numpy as np
 from typing import List, Tuple
 from .body import Body
+from .kernels import collision_pairs
 from .constants import (
     COLLISION_FACTOR, RADIUS_MERGE_EXPONENT, MAX_TRAJECTORY_LENGTH,
 )
@@ -46,19 +47,13 @@ class CollisionHandler:
         Returns:
             碰撞对列表 [(i, j), ...]
         """
-        collisions = []
         n = len(bodies)
-        
-        for i in range(n):
-            for j in range(i + 1, n):
-                dist = bodies[i].distance_to(bodies[j])
-                threshold = (bodies[i].physical_radius + bodies[j].physical_radius) * self.collision_factor
-                
-                if dist < threshold:
-                    collisions.append((i, j))
-        
-        return collisions
-    
+        if n < 2:
+            return []
+        positions = np.array([b.position for b in bodies], dtype=np.float64)
+        radii = np.array([b.physical_radius for b in bodies], dtype=np.float64)
+        return collision_pairs(positions, radii, self.collision_factor)
+
     def merge_bodies(self, body_a: Body, body_b: Body) -> Body:
         """
         融合两个天体

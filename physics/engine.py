@@ -231,9 +231,7 @@ class PhysicsEngine:
             self.integrator.step(self.bodies, self.dt)
 
         # 2. 碰撞检测与融合
-        self.bodies = self.collision_handler.resolve_collisions(self.bodies)
-        # 碰撞后加速度缓存失效
-        self._cached_accelerations = None
+        self._resolve_collisions()
 
         # 3. 记录轨迹
         self._record_trajectories()
@@ -262,13 +260,11 @@ class PhysicsEngine:
         # 2. 碰撞检测与融合
         t1 = time.perf_counter()
         before = len(self.bodies)
-        self.bodies = self.collision_handler.resolve_collisions(self.bodies)
+        self._resolve_collisions()
         col_secs = time.perf_counter() - t1
         timing.record('collision', col_secs)
         if len(self.bodies) < before:
             timing.record_count('merges', before - len(self.bodies))
-        # 碰撞后加速度缓存失效
-        self._cached_accelerations = None
 
         # 3. 记录轨迹
         t1 = time.perf_counter()
@@ -280,6 +276,13 @@ class PhysicsEngine:
         self.simulation_time += self.dt
         return int_secs, col_secs, trail_secs
     
+    def _resolve_collisions(self) -> None:
+        """仅融合改变状态时清空缓存，普通步复用 Verlet 末端加速度。"""
+        before = len(self.bodies)
+        self.bodies = self.collision_handler.resolve_collisions(self.bodies)
+        if len(self.bodies) != before:
+            self._cached_accelerations = None
+
     def _record_trajectories(self) -> None:
         """
         记录当前帧的轨迹数据
